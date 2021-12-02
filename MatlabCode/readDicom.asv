@@ -1,0 +1,16 @@
+clearvars
+
+dcmPath = 'D:\Zhen\Box Sync\Taeho_Shared\VR_Sim\PhilipsSimData\3DMRI_Vibe_201567885';
+
+dcmT = dicomCollection(dcmPath);
+
+md=dcmT.Modality;
+ idx = find(contains(md,'mr','IgnoreCase',true));
+ dcmMR = dcmT(idx, :);
+ 
+ v = dicomreadVolume(dcmMR);
+v = squeeze(v);
+
+ffn =  dcmMR.Filenames{1}{1};
+di = dicominfo(ffn);
+

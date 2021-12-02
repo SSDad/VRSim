@@ -1,9 +1,10 @@
 clearvars
 
-dataPath = fullfile(fileparts(pwd), 'Data');
+% dataPath = fullfile(fileparts(pwd), 'Data');
+dataPath = 'D:\Zhen\Box Sync\Taeho_Shared\VR_Sim\TestData_Philips_Cine';
 
 %% cine mat
-fn = 'sag4.mat';
+fn = 'sag.mat';
 ffn_mat = fullfile(dataPath, fn);
 load(ffn_mat)
 
@@ -13,7 +14,7 @@ nSlice = size(cineData.v, 3);
 dataSize = nRow*nCol*2; 
 
 %% DAT
-fn = 'test4.dat';
+fn = 'cinePhilips.dat';
 ffn_DAT = fullfile(dataPath, fn);
 
 %% ascii header

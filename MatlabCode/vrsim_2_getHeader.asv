@@ -2,12 +2,8 @@ clearvars
 
 % dataPath = fullfile(fileparts(pwd), 'Data');
 dataPath = 'D:\Zhen\Box Sync\Taeho_Shared\VR_Sim\TestData_VR_WriteBack';
-fn = 'Gating_scan_5_2D_rad_FOV350_8FPS_th7_sag.dat'; % cine
-savefn = 'cineHeader';
-
-fn = 'PlanScanProt.dat';  % 3d
+fn = 'Gating_scan_5_2D_rad_FOV350_8FPS_th7_sag.dat';
 ffn = fullfile(dataPath, fn);
-savefn = '3DHeader';
 
 fid = fopen( ffn, 'rb' );
 
@@ -33,4 +29,4 @@ for itime = 1
 end
 fclose(fid);
 
-save(savefn, 'asciiDicomTags', 'str_header');
+save('asciiDicomTags', 'asciiDicomTags', 'str_header');

@@ -1,19 +1,23 @@
-clearvars
+function [volume] = ConvertSendExternalToDicom( filename, someDicomFileName, displayModulo, maxSlice, outputDirectory, seriesNumber  )
+% To convert a Siemens send external file to many dicom data files.
+% Each image in the send external file will be written as a single dicom
+% file.
+% The arguments are:
+% filename - The name of the Siemens send external file.
+% someDicomFileName - any dicom file you want.  It will be used as a
+% reference, and all the fields will be changed for each output image.
+% displayModulo - If you want to see every image, set this to 1.  Otherwise
+% you can set it to 5 to display every 5th image.
+% maxSlice - How many slices to convert.  Set to 99999999 to convert them
+% all.
+% outputDirectory - where to put all the output dicom files.
+% seriesNumber - what is the series number for this data set.
+%
+fid = fopen( filename, 'rb' );
+numberOfImages = 0;
 
-%% read
-dataPath = 'D:\Zhen\Box Sync\Taeho_Shared\VR_Sim\TestData_VR_WriteBack';
-% dataPath = fullfile(fileparts(pwd), 'Data');
-fn_org = 'Gating_scan_5_2D_rad_FOV350_8FPS_th7_sag.DAT';
-fn_org = 'PlanScanProt.dat';
+fprintf( '%s\n', filename );
 
-ffn_DAT = fullfile(dataPath, fn_org);
-
-fid = fopen( ffn_DAT, 'rb' );
-
-maxSlice = 9999999;
-
-% hF = figure(1); clf(hF);
-% ax = axes('parent', hF);
 for itime = 1:1:maxSlice
     
     % How big is the header.
@@ -22,27 +26,16 @@ for itime = 1:1:maxSlice
     headerSize = fread( fid, 1, 'int32' );
     
     % File ends when they write a zero header size
-%     if headerSize == 0
-%         break
-%     end
+    if headerSize == 0, break, end;
     % Or the header comes back with nothing in it.
-    if isempty(headerSize)
-        break
-    end
-
-    hdSize(itime) = headerSize;
-    
+    if isempty(headerSize), return, end;
     
     % How big is the data.
     dataSize = fread( fid, 1, 'int32' );
-    dtSize(itime) = dataSize;
-    
+
     % Read the ascii header data
     header = fread( fid, headerSize, 'int8' );
     [asciiDicomTags, count] = sscanf( char(header), '%s' );
-    
-    hds{itime} = header;
-    tags{itime} = asciiDicomTags;
     
     % Find number of rows in the header
     rowStringLocation = strfind( asciiDicomTags, 'DICOM.NoOfRows' );
@@ -73,8 +66,8 @@ for itime = 1:1:maxSlice
     lastChar = firstChar + 5;
     if lastChar > length( asciiDicomTags )
         lastChar = length( asciiDicomTags );
-    end    
-%     keyboard    
+    end      
+    keyboard    
     xsizeChar = asciiDicomTags( firstChar: lastChar );
     xloc(itime) = sscanf( xsizeChar, '%f' );
 
@@ -149,42 +142,112 @@ for itime = 1:1:maxSlice
         sliceLocation(itime), pixelSpacing0(itime), pixelSpacing1(itime) );
     
     % If this is the first image, we must allocate the volume
-%     if numberOfImages == 0
-%         volume( 1:ysize, 1:xsize, 1 ) = 0;
-%         numberOfImages = numberOfImages + 1;
-%     else
-%         numberOfImages = numberOfImages + 1;
-%     end
+    if numberOfImages == 0
+        volume( 1:ysize, 1:xsize, 1 ) = 0;
+        numberOfImages = numberOfImages + 1;
+    else
+        numberOfImages = numberOfImages + 1;
+    end
     
     image = fread( fid, xsize*ysize, 'int16' );
     image = reshape( image, xsize, ysize );
-    image = permute( image, [ 2 1 ] );
+%     image = permute( image, [ 2 1 ] );
+image = rot90(image, -1);
+
+    %     
+%     for x = 1:xsize
+%         for y = 1:ysize
+%             sum = sum + image(x,y);
+%         end
+%     end
+%     
+%     if sum > 100
+%     end
     
-    v(:,:,itime) = image;
+    volume(:,:,numberOfImages) = image;
+    
+    % Display input image every so often.
+    mod100 = mod( numberOfImages, displayModulo );
+    
+    if mod100 == 0
+                
+        imagesc( image );
+        title( ['time=' num2str(itime) ] );
+        colormap gray;
+        axis image;
+        pause(0.1);
+        
+    end        
 end
 fclose(fid);
 
-%% write back
-nSlice = size(v, 3);
-fn_wb = [fn_org(1:end-4), '_WriteBack.dat'];
-ffn_wb = fullfile(dataPath, fn_wb);
+% Now write the volume as dicom images.
 
-fid = fopen( ffn_wb, 'wb' );
+% Open a dicom image as a reference
+try
+    image = dicomread( someDicomFileName );
+    info = dicominfo( someDicomFileName );
+catch ME
+    
+    fprintf( 'Exception reading dicom file %s\n', someDicomFileName );
+    fprintf( '%s\n', ME.message );
+    return;
+    
+end    
 
-for iSlice = 1:nSlice
+% output series will have a new uid
+seriesuid = dicomuid;
+
+% output study will also have a new uid.
+studyuid = dicomuid;
+
+% dimensions
+nsize = size(volume);
+
+% Reset some of the dicom fields for this patient
+info.PatientName.FamilyName = 'DICOM';
+info.PatientName.GivenName = 'ConvertedFromSendExternal';
+info.PatientID=sprintf( 'ViewRay' );
+info.PatientSex='O';
+info.PatientBirthDate='19700901';
+info.Rows = nsize(2);
+info.Columns = nsize(1);
+info.PixelSpacing = [ pixelSpacing0(1)*10, pixelSpacing1(1)*10 ]; % units are mm
+info.SeriesNumber = seriesNumber;
+info.StudyInstanceUID = studyuid;
+info.SeriesInstanceUID = seriesuid;
+
+% Now create each slice, changing dicom header each time.
+for islice = 1:1:nsize(3)
+    image = volume(:,:,islice);
+    % Set the other dicom fields that have to be set for each slice
+    info.SliceLocation = sliceLocation(islice);
+    info.SliceLocation = info.SliceLocation * 10; % mm
+    info.InstanceNumber = islice;
+    info.ImagePositionPatient = [ xloc(islice) yloc(islice) zloc(islice) ];
+    simage = int16(image);
     
-    % CONTROL.ChronSliceNo
-    % CONTROL.ChronSliceNo=1DICOM.SliceNo
-    fwrite(fid, hdSize(iSlice), 'int32');
-    
-    fwrite(fid, dtSize(iSlice), 'int32');     % writedataSize
-    
-    fwrite(fid, hds{iSlice}, 'int8');     % write tag
-%     fwrite(fid, tags{iSlice}, 'int8');     % write tag
-    
-    data = v(:,:,iSlice);
-    data = data';
-    fwrite(fid, data(:), 'int16');
-    
+    % Generate a filename and write it to the disk as dicom.
+    try
+        
+        if islice == 1
+            mkdir( outputDirectory );
+        end
+        
+        fname = sprintf( '%s\\%s %d %d.dcm' ,...
+            outputDirectory, info.PatientID, seriesNumber, islice );
+        dicomwrite( simage, fname, info )
+        
+            fprintf( '%d of %d Wrote %s\n', islice, nsize(3), fname );
+        
+    catch ME
+        
+        fprintf( 'Exception writing dicom file %s\n', fname );
+        fprintf( '%s\n', ME.message );
+        return;
+        
+    end
+        
 end
-fclose(fid);
+
+end
